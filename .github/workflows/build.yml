@@ -1,0 +1,60 @@
+name: Build RINGRAM APK
+
+on:
+  workflow_dispatch:   # Actions tabidan "Run workflow" tugmasi bilan ishga tushadi
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      API_ID: ${{ secrets.API_ID }}
+      API_HASH: ${{ secrets.API_HASH }}
+      APP_PACKAGE: uz.rin.ringram        # o'zingizning paket nomingiz
+
+    steps:
+      - name: Bo'sh joy ochish
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Repodagi kodni submodullari bilan olish
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK / NDK o'rnatish
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-36" "build-tools;36.0.0" \
+            "ndk;27.2.12479018" "cmake;3.22.1"
+
+      - name: api_id / api_hash / paket nomini qo'yish
+        run: |
+          B=TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java
+          sed -i "s/public static int APP_ID = .*/public static int APP_ID = ${API_ID};/" $B
+          sed -i "s/public static String APP_HASH = .*/public static String APP_HASH = \"${API_HASH}\";/" $B
+          sed -i "s/^APP_PACKAGE=.*/APP_PACKAGE=${APP_PACKAGE}/" gradle.properties
+          # google-services.json dagi paket nomlarini moslash (push ishlamaydi, faqat yig'ish uchun)
+          find . -name google-services.json -exec sed -i "s/org\.telegram\.messenger/${APP_PACKAGE}/g" {} +
+          # bepul runner xotirasiga moslash
+          sed -i "s/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g/" gradle.properties
+          grep -n "APP_ID =\|APP_PACKAGE" $B gradle.properties | sed "s/\"[0-9a-f]\{32\}\"/\"***\"/"
+
+      - name: APK yig'ish
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --max-workers=2 :TMessagesProj_App:assembleAfatDebug
+
+      - name: APK ni yuklab olish uchun saqlash
+        uses: actions/upload-artifact@v4
+        with:
+          name: ringram-apk
+          path: TMessagesProj_App/build/outputs/apk/**/*.apk
+          retention-days: 7
