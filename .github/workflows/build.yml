@@ -15,8 +15,15 @@ jobs:
     steps:
       - name: Bo'sh joy ochish
         run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL \
+            /usr/local/share/boost /usr/share/swift /opt/microsoft /usr/local/.ghcup
+          sudo docker image prune --all --force || true
+          # qo'shimcha xotira (swap), RAM yetmasligining oldini olish uchun
+          sudo swapoff -a || true
+          sudo fallocate -l 8G /mnt/swapfile && sudo chmod 600 /mnt/swapfile \
+            && sudo mkswap /mnt/swapfile && sudo swapon /mnt/swapfile || true
           df -h /
+          free -m
 
       - name: Repodagi kodni submodullari bilan olish
         uses: actions/checkout@v4
@@ -49,6 +56,9 @@ jobs:
           sed -i "s/^APP_PACKAGE=.*/APP_PACKAGE=${APP_PACKAGE}/" gradle.properties
           # google-services.json dagi paket nomlarini moslash (push ishlamaydi, faqat yig'ish uchun)
           find . -name google-services.json -exec sed -i "s/org\.telegram\.messenger/${APP_PACKAGE}/g" {} +
+          # faqat zamonaviy telefonlar uchun (arm64-v8a): yig'ish 3-4 barobar tez va yengil
+          sed -i 's/abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"/abiFilters "arm64-v8a"/' TMessagesProj_App/build.gradle
+          grep -n 'abiFilters' TMessagesProj_App/build.gradle
           # bepul runner xotirasiga moslash
           sed -i "s/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g/" gradle.properties
           grep -n "APP_ID =\|APP_PACKAGE" $B gradle.properties | sed "s/\"[0-9a-f]\{32\}\"/\"***\"/"
@@ -57,6 +67,13 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon --max-workers=2 :TMessagesProj_App:assembleAfatDebug
+
+      - name: Xato bo'lsa - tizim holati
+        if: failure()
+        run: |
+          df -h /
+          free -m
+          sudo dmesg | tail -n 25 || true
 
       - name: APK ni yuklab olish uchun saqlash
         uses: actions/upload-artifact@v4
