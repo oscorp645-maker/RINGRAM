@@ -37,6 +37,12 @@ jobs:
 
       - name: api_id / api_hash / paket nomini qo'yish
         run: |
+          # secret ichidagi ko'rinmas bo'sh joy/yangi qatorlarni olib tashlash
+          API_ID="$(printf '%s' "$API_ID" | tr -d '[:space:]')"
+          API_HASH="$(printf '%s' "$API_HASH" | tr -d '[:space:]')"
+          if [ -z "$API_ID" ] || [ -z "$API_HASH" ]; then
+            echo "XATO: API_ID yoki API_HASH secret bo'sh yoki nomi noto'g'ri"; exit 1
+          fi
           B=TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java
           sed -i "s/public static int APP_ID = .*/public static int APP_ID = ${API_ID};/" $B
           sed -i "s/public static String APP_HASH = .*/public static String APP_HASH = \"${API_HASH}\";/" $B
