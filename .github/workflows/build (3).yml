@@ -55,7 +55,8 @@ jobs:
           sed -i "s/public static String APP_HASH = .*/public static String APP_HASH = \"${API_HASH}\";/" $B
           sed -i "s/^APP_PACKAGE=.*/APP_PACKAGE=${APP_PACKAGE}/" gradle.properties
           # google-services.json dagi paket nomlarini moslash (push ishlamaydi, faqat yig'ish uchun)
-          find . -name google-services.json -exec sed -i "s/org\.telegram\.messenger/${APP_PACKAGE}/g" {} +
+          # kutubxona (TMessagesProj) o'z nomini saqlab qolishi kerak, shuning uchun uni o'tkazib yuboramiz
+          find . -name google-services.json -not -path './TMessagesProj/*' -exec sed -i "s/org\.telegram\.messenger/${APP_PACKAGE}/g" {} +
           # faqat zamonaviy telefonlar uchun (arm64-v8a): yig'ish 3-4 barobar tez va yengil
           sed -i 's/abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"/abiFilters "arm64-v8a"/' TMessagesProj_App/build.gradle
           grep -n 'abiFilters' TMessagesProj_App/build.gradle
