@@ -68,6 +68,117 @@ jobs:
           sed -i "s/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g/" gradle.properties
           grep -n "APP_ID =\|APP_PACKAGE" $B gradle.properties | sed "s/\"[0-9a-f]\{32\}\"/\"***\"/"
 
+      - name: Tema - oltin-qora
+        run: |
+          # Kunduzgi tema: asosiy ko'k rang -> logotipdagi chuqur oltin (oq fonda o'qiladigan)
+          C=TMessagesProj/src/main/java/org/telegram/ui/ActionBar/ThemeColors.java
+          sed -i 's/TELEGRAM_COLOR = 0xFF229AF0/TELEGRAM_COLOR = 0xFFA96501/; s/TELEGRAM_COLOR_TEXT = 0xFF298ACF/TELEGRAM_COLOR_TEXT = 0xFF8A500A/' $C
+          grep -n 'TELEGRAM_COLOR' $C | head -3
+          # Tungi temalar (Dark Blue va Night): ranglar logotipdan olingan, xabarlar yaltiroq oltin gradient
+          cat > /tmp/gold.py <<'PY'
+          import colorsys, re, sys
+
+          # Ranglar logotipdan olingan
+          GOLD = 0xFFFACC10        # yorqin oltin (logotipdagi eng yorqin to'yingan oltin)
+          OVR = {
+              'actionBarDefault': 0xFF0A0603,           # iliq qora (yuqori panel)
+              'actionBarDefaultTitle': GOLD,            # panel sarlavhasi: oltin
+              'actionBarDefaultIcon': GOLD,             # panel ikonkalari: oltin
+              'chats_unreadCounterText': 0xFF000000,    # oltin ustidagi yozuv: qora
+              'chats_actionIcon': 0xFF000000,
+              'chats_actionPressedBackground': 0xFFD9A800,
+              'actionBarActionModeDefault': 0xFF160B03,
+              'chats_actionBackground': GOLD,           # suzuvchi tugma
+              'chat_messagePanelSend': GOLD,            # yuborish tugmasi
+              # men yozgan xabar: yaltiroq oltin gradient (logotipdagi yorqin -> chuqur oltin)
+              'chat_outBubble': 0xFFFFE45E,
+              'chat_outBubbleGradient': 0xFFFACC10,
+              'chat_outBubbleGradient2': 0xFFE69A00,
+              'chat_outBubbleSelected': 0xFFE0A800,
+              'chat_messageTextOut': 0xFF1A1100,        # oltin ustida qora-jigarrang yozuv
+              'chat_messageLinkOut': 0xFF5A3500,
+              'chat_outSentCheckRead': 0xFF4A3000,
+              'chat_outSentCheckReadSelected': 0xFF4A3000,
+              'chat_inBubble': 0xFF1F1409,              # kelgan xabar: iliq to'q
+              'chat_inBubbleSelected': 0xFF2B1B0C,
+              'windowBackgroundWhite': 0xFF000000,      # asosiy fon: sof qora
+              'chat_wallpaper': 0xFF000000,
+              'dialogBackground': 0xFF160B03,
+              'chats_menuBackground': 0xFF0A0603,
+              'chat_messagePanelBackground': 0xFF0A0603,
+          }
+          def out_fg(key, val):
+              # chat_out* (pufak rangidan tashqari) elementlari oltin fonda ko'rinishi uchun to'q jigarrang, shaffoflik saqlanadi
+              if key.startswith('chat_out') and 'Bubble' not in key and 'Shadow' not in key and key not in OVR:
+                  return (val & 0xFF000000) | 0x4A3000
+              return None
+
+          LINE = re.compile(r'^([A-Za-z0-9_]+)=(-?\d+)$')
+          HEX = re.compile(r'^([A-Za-z0-9_]+)=#([0-9a-fA-F]{8})$')
+
+          def recolor(u):
+              a, r, g, b = (u >> 24) & 255, (u >> 16) & 255, (u >> 8) & 255, u & 255
+              h, l, s = colorsys.rgb_to_hls(r / 255, g / 255, b / 255)
+              hd = h * 360
+              if s >= 0.12 and 170 <= hd <= 265:          # ko'k / zangori rang oilasi
+                  if l < 0.30:                             # to'q fonlar -> iliq qora
+                      h, s, l = 30 / 360, 0.35, l * 0.35
+                  elif l < 0.50:                           # o'rta ohang -> bronza
+                      h, s, l = 34 / 360, min(max(s, 0.60), 0.90), l * 0.80
+                  else:                                    # urg'u rang -> oltin
+                      h, s, l = 48 / 360, 0.95, max(l, 0.52)
+                  r, g, b = [int(round(x * 255)) for x in colorsys.hls_to_rgb(h, l, s)]
+                  return (a << 24) | (r << 16) | (g << 8) | b
+              return u
+
+          def conv(path):
+              out, n, ov, seen = [], 0, 0, set()
+              for line in open(path, encoding='utf-8', errors='surrogateescape').read().split('\n'):
+                  mh = HEX.match(line)
+                  if mh:
+                      key, val = mh.group(1), int(mh.group(2), 16); seen.add(key)
+                      new = OVR[key] if key in OVR else (out_fg(key, val) if out_fg(key, val) is not None else recolor(val))
+                      if key in OVR: ov += 1
+                      if new != val: n += 1
+                      out.append(f'{key}=#{new:08x}')
+                      continue
+                  m = LINE.match(line)
+                  if m:
+                      key, val = m.group(1), int(m.group(2)) & 0xFFFFFFFF; seen.add(key)
+                      new = OVR[key] if key in OVR else (out_fg(key, val) if out_fg(key, val) is not None else recolor(val))
+                      if key in OVR: ov += 1
+                      if new != val: n += 1
+                      if new >= 2**31: new -= 2**32
+                      line = f'{key}={new}'
+                  out.append(line)
+              while out and out[-1] == '':
+                  out.pop()
+              for key, new in OVR.items():
+                  if key not in seen:
+                      out.append(f'{key}=#{new:08x}'); ov += 1
+              out.append('')
+              open(path, 'w', encoding='utf-8', errors='surrogateescape').write('\n'.join(out))
+              print(path, "o'zgargan:", n, 'maxsus:', ov)
+
+          for p in sys.argv[1:]:
+              conv(p)
+          PY
+          python3 /tmp/gold.py TMessagesProj/src/main/assets/darkblue.attheme TMessagesProj/src/main/assets/night.attheme
+
+      - name: Boshlang'ich tema - qora fon
+        run: |
+          T=TMessagesProj/src/main/java/org/telegram/ui/ActionBar/Theme.java
+          # Yangi o'rnatilgan ilova darhol qora-oltin ("Dark Blue" asosidagi) temada ochiladi
+          sed -i 's/preferences.getString("theme", null)/preferences.getString("theme", "Dark Blue")/' $T
+          grep -n 'getString("theme"' $T
+          # Ishga tushish oynasi (splash) oq o'rniga qora
+          R=TMessagesProj/src/main/res
+          for f in $R/values/styles.xml $R/values-v21/styles.xml $R/values-v31/styles.xml; do
+            sed -i '/name="Theme.TMessages.Start"/,/<\/style>/ s|@android:color/white|@android:color/black|g' $f
+          done
+          sed -i '/name="Theme.TMessages.Start"/,/<\/style>/ s|<item name="android:windowBackground">#1f2732</item>|<item name="android:windowBackground">#000000</item>|' $R/values-night/styles.xml
+          grep -n -A8 'name="Theme.TMessages.Start"' $R/values/styles.xml | grep -E 'windowBackground|colorBackground'
+
       - name: APK yig'ish
         run: |
           chmod +x gradlew
