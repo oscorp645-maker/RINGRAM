@@ -82,6 +82,15 @@ jobs:
           GOLD = 0xFFFACC10        # yorqin oltin (logotipdagi eng yorqin to'yingan oltin)
           OVR = {
               'actionBarDefault': 0xFF0A0603,           # iliq qora (yuqori panel)
+              # Premium yulduz va hikoya halqalari: binafsha/yashil o'rniga oltin
+              'premiumStarGradient1': 0xFFFFE680,
+              'premiumStarGradient2': 0xFFD4A017,
+              'stories_circle1': 0xFFFFD700,
+              'stories_circle2': 0xFFB8860B,
+              'stories_circle_dialog1': 0xFFFFD700,
+              'stories_circle_dialog2': 0xFFB8860B,
+              'stories_circle_closeFriends1': 0xFFFFE680,
+              'stories_circle_closeFriends2': 0xFFD4A017,
               'actionBarDefaultTitle': GOLD,            # panel sarlavhasi: oltin
               'actionBarDefaultIcon': GOLD,             # panel ikonkalari: oltin
               'chats_unreadCounterText': 0xFF000000,    # oltin ustidagi yozuv: qora
@@ -102,7 +111,6 @@ jobs:
               'chat_inBubble': 0xFF1F1409,              # kelgan xabar: iliq to'q
               'chat_inBubbleSelected': 0xFF2B1B0C,
               'windowBackgroundWhite': 0xFF000000,      # asosiy fon: sof qora
-              'chat_wallpaper': 0xFF000000,
               'dialogBackground': 0xFF160B03,
               'chats_menuBackground': 0xFF0A0603,
               'chat_messagePanelBackground': 0xFF0A0603,
@@ -164,6 +172,27 @@ jobs:
               conv(p)
           PY
           python3 /tmp/gold.py TMessagesProj/src/main/assets/darkblue.attheme TMessagesProj/src/main/assets/night.attheme
+
+      - name: Fon rasmi (saroy) va splash (logotip)
+        run: |
+          R=TMessagesProj/src/main/res
+          test -f .github/rin/wallpaper.jpg && test -f .github/rin/splash.png
+          # Chat foni: temalar fayliga WPS bo'limi sifatida rasm qo'shiladi. Rasm ishlashi uchun tekis chat_wallpaper rangi olib tashlanadi
+          python3 - <<'PY'
+          wp = open('.github/rin/wallpaper.jpg', 'rb').read()
+          for n in ('darkblue', 'night'):
+              p = f'TMessagesProj/src/main/assets/{n}.attheme'
+              data = open(p, 'rb').read().decode('utf-8', 'surrogateescape')
+              lines = [l for l in data.split('\n') if l and not l.startswith('chat_wallpaper')]
+              out = ('\n'.join(lines) + '\nWPS\n').encode('utf-8', 'surrogateescape') + wp + b'\nWPE\n'
+              open(p, 'wb').write(out)
+              print(p, 'qatorlar:', len(lines), 'fon:', len(wp) // 1024, 'KB')
+          PY
+          # Splash (Android 12+): Telegram samolyoti o'rniga logotip
+          mkdir -p $R/drawable-nodpi
+          cp .github/rin/splash.png $R/drawable-nodpi/rin_splash.png
+          sed -i 's|@drawable/tg_splash_320|@drawable/rin_splash|g' $R/values-v31/styles.xml
+          grep -n 'rin_splash' $R/values-v31/styles.xml
 
       - name: Boshlang'ich tema - qora fon
         run: |
